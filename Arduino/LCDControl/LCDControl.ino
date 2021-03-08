@@ -1,18 +1,28 @@
 #include <UTFT.h>
 #include <URTouch.h>
 #include <TimerOne.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
 #include "ButtonUtils.h"
 #include "PumpControlUtils.h"
-#include "assets/under_construction.h"
+#include "under_construction.c"
 
 #define SCREEN_WIDTH 320
 #define SCREEN_HEIGHT 280
+#define ONE_WIRE_BUS A7
 
 // Initialize display
 UTFT myGLCD(ILI9341_16, 38, 39, 40, 41);
 
 // Initialize touchscreen
 URTouch myTouch(6, 5, 4, 3, 2);
+
+// Setup a OneWire instance to communicate with any OneWire devices
+OneWire oneWire(ONE_WIRE_BUS);
+
+// Pass OneWire reference to Dallas Temperature
+DallasTemperature temperatureSensors(&oneWire);
 
 // Initialize Pump Control Data
 pumpMetadata pump1{1, 8, A0, false, false};
@@ -21,7 +31,7 @@ pumpMetadata pump1{1, 8, A0, false, false};
 extern uint8_t SmallFont[];
 extern uint8_t BigFont[];
 extern uint8_t SevenSegNumFont[];
-extern unsigned int under_construction[];
+extern const unsigned int under_construction[];
 long x, y;
 String currentPage = "HOME";
 
@@ -36,11 +46,13 @@ uint16_t yi = 100;
 uint16_t measuredMoistureTemp = 100;
 
 bool readSensorWithNextLoopCycle = true;
+bool readTemperatureWithNextLoopCycle = true;
 bool refreshExpectedMoistureDisplayValueOnNextLoopCycle = true;
 bool refreshMeasuredMoistureDisplayValueOnNextLoopCycle = true;
 bool refreshPumpOnOffButtonOnNextLoopCycle = true;
 bool refreshPumpAutoModeButtonOnNextLoopCycle = true;
 bool refreshMoistureBarOnNextLoopCycle = true;
+bool refreshTemperatureDisplayOnNextLoopCycle = true;
 
 bool homeScreenIsInitialized = false;
 bool pumpScreen1IsInitialized = false;
@@ -101,10 +113,6 @@ void initializeLoveScreen()
   loveScreenIsInitialized = false;
 }
 
-void resetLoveScreenBools()
-{
-}
-
 void handleLoveScreenInput()
 {
   if (myTouch.dataAvailable())
@@ -120,10 +128,6 @@ void handleLoveScreenInput()
     }
     loveScreenIsInitialized = false;
   }
-}
-
-void refreshLoveScreen()
-{
 }
 
 void initializeHomeScreen()
@@ -166,11 +170,18 @@ void initializeHomeScreen()
   myGLCD.setBackColor(255, 0, 0);                                                                           // Sets the background color of the area where the text will be printed to red, same as the button
   myGLCD.print("<3", loveButtonLimits.X1 + 10, loveButtonLimits.Y1 + 10);                                   // Prints the string
 
+  // temperature Display
+  myGLCD.setColor(0, 255, 0);                                                                               // Sets color to red
+  myGLCD.fillRoundRect(temperatureDisplayLimits.X1, temperatureDisplayLimits.Y1, temperatureDisplayLimits.X2, temperatureDisplayLimits.Y2); // Draws filled rounded rectangle
+  myGLCD.setColor(255, 255, 255);                                                                           // Sets color to white
+  myGLCD.drawRoundRect(temperatureDisplayLimits.X1, temperatureDisplayLimits.Y1, temperatureDisplayLimits.X2, temperatureDisplayLimits.Y2); // Draws rounded rectangle without a fill, so the overall appearance of the button looks like it has a frame
+
   homeScreenIsInitialized = true;
 }
 
 void resetHomeScreenBools()
 {
+  refreshTemperatureDisplayOnNextLoopCycle = true;
 }
 
 void handleHomeScreenInput()
@@ -214,9 +225,20 @@ void handleHomeScreenInput()
   }
 }
 
+void refreshTemperatureDisplay()
+{
+  myGLCD.setBackColor(0, 255, 0);                                                                                               // Sets the background color of the area where the text will be printed to green, same as the button
+  myGLCD.printNumF(temperatureSensors.getTempCByIndex(0), 1, temperatureDisplayLimits.X1 + 10, temperatureDisplayLimits.Y1 + 10);
+  //myGLCD.print("°C", temperatureDisplayLimits.X1 + 50, temperatureDisplayLimits.Y1 + 10);
+  refreshTemperatureDisplayOnNextLoopCycle = false;
+}
+
 void refreshHomeScreen()
 {
-
+  if (refreshTemperatureDisplayOnNextLoopCycle)
+  {
+    refreshTemperatureDisplay();
+  }
 }
 
 void initializeUnderConstructionScreen()
@@ -240,12 +262,6 @@ void handleUnderConstructionScreenInput()
     underConstructionScreenIsInitialized = false;
   }
 }
-
-void refreshUnderConstructionScreen()
-{
-
-}
-  
 
 void initializePumpControlScreen()
 {
@@ -510,6 +526,7 @@ void refreshPumpControlScreen()
 void timer_isr()
 {
   readSensorWithNextLoopCycle = true;
+  readTemperatureWithNextLoopCycle = true;
 }
 
 void readSensor()
@@ -545,9 +562,17 @@ bool isSoilTooDry()
   }
 }
 
+void requestTemperature()
+{
+  temperatureSensors.requestTemperatures();
+  refreshTemperatureDisplayOnNextLoopCycle = true;
+}
+
 void setup()
 {
   Serial.begin(9600);
+  temperatureSensors.begin();
+  temperatureSensors.requestTemperatures();
 
   Timer1.initialize(1000000);
   Timer1.attachInterrupt(timer_isr);
@@ -585,30 +610,32 @@ void loop()
     refreshMoistureBarOnNextLoopCycle = true;
   }
 
+  if (readTemperatureWithNextLoopCycle)
+  {
+    requestTemperature();
+    readTemperatureWithNextLoopCycle = false;
+  }
+
   // Home Screen
   if (currentPage == "HOME")
   {
     if (!homeScreenIsInitialized)
     {
       initializeHomeScreen();
-      //resetHomeScreenBools();
     }
 
     handleHomeScreenInput();
 
-    //refreshHomeScreen();
+    refreshHomeScreen();
   }
   else if (currentPage == "LOVE")
   {
     if (!loveScreenIsInitialized)
     {
       initializeLoveScreen();
-      //resetLoveScreenBools();
     }
     
     handleLoveScreenInput();
-
-    //refreshLoveScreen();
   }
   else if (currentPage == "MOT1")
   {
@@ -631,7 +658,5 @@ void loop()
     }
 
     handleUnderConstructionScreenInput();
-
-    refreshUnderConstructionScreen();
   }
 }
