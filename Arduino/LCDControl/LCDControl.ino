@@ -35,6 +35,9 @@ extern const unsigned int under_construction[];
 long x, y;
 String currentPage = "HOME";
 
+uint16_t temperatureMeasureIntervallInSes = 5; 
+uint16_t temperatureMeasureCounter = 0;
+
 uint16_t expectedMoisture = 0;
 uint16_t expectedMoisturePercent = 0;
 uint16_t measuredMoisture = 0;
@@ -43,10 +46,9 @@ const uint16_t minimumMoisture = 200;
 const uint16_t maximumMoisture = 700;
 
 uint16_t yi = 100;
-uint16_t measuredMoistureTemp = 100;
+uint16_t measuredMoistureRaw = 100;
 
 bool readSensorWithNextLoopCycle = true;
-bool readTemperatureWithNextLoopCycle = true;
 bool refreshExpectedMoistureDisplayValueOnNextLoopCycle = true;
 bool refreshMeasuredMoistureDisplayValueOnNextLoopCycle = true;
 bool refreshPumpOnOffButtonOnNextLoopCycle = true;
@@ -56,7 +58,6 @@ bool refreshTemperatureDisplayOnNextLoopCycle = true;
 
 bool homeScreenIsInitialized = false;
 bool pumpScreen1IsInitialized = false;
-bool loveScreenIsInitialized = false;
 bool underConstructionScreenIsInitialized = false;
 
 // Highlights the button when pressed
@@ -64,8 +65,10 @@ void drawFrame(int x1, int y1, int x2, int y2)
 {
   myGLCD.setColor(255, 0, 0);
   myGLCD.drawRoundRect(x1, y1, x2, y2);
-  while (myTouch.dataAvailable())
+  while (myTouch.dataAvailable()) 
+  {
     myTouch.read();
+  }
   myGLCD.setColor(255, 255, 255);
   myGLCD.drawRoundRect(x1, y1, x2, y2);
 }
@@ -99,37 +102,6 @@ void drawReturnField()
   myGLCD.print("ret", 25, 70);                                                                                      // Prints the string
 }
 
-void initializeLoveScreen()
-{
-  myGLCD.setBackColor(0, 0, 0);
-  myGLCD.setColor(255, 0, 0);
-  myGLCD.setFont(BigFont);
-  myGLCD.print("*lieb*", CENTER, 50);
-
-  myGLCD.setFont(SmallFont);
-  myGLCD.setColor(255, 255, 255);
-  myGLCD.print("*press anywhere to return*", CENTER, 200);
-
-  loveScreenIsInitialized = false;
-}
-
-void handleLoveScreenInput()
-{
-  if (myTouch.dataAvailable())
-  {
-    myTouch.read();
-    x = myTouch.getX();
-    y = myTouch.getY() * (-1) + 240;
-
-    if (x != -1 && y != -1)
-    {
-      currentPage = "HOME";
-      myGLCD.clrScr(); // Clears the screen
-    }
-    loveScreenIsInitialized = false;
-  }
-}
-
 void initializeHomeScreen()
 {
   drawHeadline("");
@@ -161,20 +133,12 @@ void initializeHomeScreen()
   myGLCD.setBackColor(0, 255, 0);                                                                               // Sets the background color of the area where the text will be printed to green, same as the button
   myGLCD.print("SENS 3", pump3ButtonLimits.X1 + 10, pump3ButtonLimits.Y1 + 10);                                 // Prints the string
 
-  // LOVE BUTTON
-  myGLCD.setColor(255, 0, 0);                                                                               // Sets color to red
-  myGLCD.fillRoundRect(loveButtonLimits.X1, loveButtonLimits.Y1, loveButtonLimits.X2, loveButtonLimits.Y2); // Draws filled rounded rectangle
-  myGLCD.setColor(255, 255, 255);                                                                           // Sets color to white
-  myGLCD.drawRoundRect(loveButtonLimits.X1, loveButtonLimits.Y1, loveButtonLimits.X2, loveButtonLimits.Y2); // Draws rounded rectangle without a fill, so the overall appearance of the button looks like it has a frame
-  myGLCD.setFont(BigFont);                                                                                  // Sets the font to big
-  myGLCD.setBackColor(255, 0, 0);                                                                           // Sets the background color of the area where the text will be printed to red, same as the button
-  myGLCD.print("<3", loveButtonLimits.X1 + 10, loveButtonLimits.Y1 + 10);                                   // Prints the string
-
   // temperature Display
   myGLCD.setColor(0, 255, 0);                                                                               // Sets color to red
   myGLCD.fillRoundRect(temperatureDisplayLimits.X1, temperatureDisplayLimits.Y1, temperatureDisplayLimits.X2, temperatureDisplayLimits.Y2); // Draws filled rounded rectangle
   myGLCD.setColor(255, 255, 255);                                                                           // Sets color to white
   myGLCD.drawRoundRect(temperatureDisplayLimits.X1, temperatureDisplayLimits.Y1, temperatureDisplayLimits.X2, temperatureDisplayLimits.Y2); // Draws rounded rectangle without a fill, so the overall appearance of the button looks like it has a frame
+  refreshTemperatureDisplay();
 
   homeScreenIsInitialized = true;
 }
@@ -211,13 +175,6 @@ void handleHomeScreenInput()
     {
       drawFrame(pump3ButtonLimits);
       currentPage = "MOT3";
-      myGLCD.clrScr();
-    }
-    // PRESS LOVE BUTTON
-    else if (pointIsInsideButtonLimits(x, y, loveButtonLimits))
-    {
-      drawFrame(loveButtonLimits);
-      currentPage = "LOVE";
       myGLCD.clrScr();
     }
 
@@ -446,14 +403,14 @@ void refreshMoistureBar()
   myGLCD.setColor(255, 255, 255);
   myGLCD.fillRect(moistureSetterBarButtonLimits.X1, yi + 2, moistureSetterBarButtonLimits.X2, yi - 2);
   myGLCD.setColor(255, 0, 0);
-  myGLCD.fillRect(moistureSetterBarButtonLimits.X1, measuredMoistureTemp + 2, moistureSetterBarButtonLimits.X2, measuredMoistureTemp - 2);
+  myGLCD.fillRect(moistureSetterBarButtonLimits.X1, measuredMoistureRaw + 2, moistureSetterBarButtonLimits.X2, measuredMoistureRaw - 2);
   myGLCD.setColor(255, 255, 0);
-  myGLCD.fillRect(moistureSetterBarButtonLimits.X1, moistureSetterBarButtonLimits.Y1 - 2, moistureSetterBarButtonLimits.X2, min(yi, measuredMoistureTemp) - 2);
-  myGLCD.fillRect(moistureSetterBarButtonLimits.X1, max(yi, measuredMoistureTemp) + 2, moistureSetterBarButtonLimits.X2, moistureSetterBarButtonLimits.Y2 + 2);
-  myGLCD.fillRect(moistureSetterBarButtonLimits.X1, min(yi, measuredMoistureTemp) + 2, moistureSetterBarButtonLimits.X2, max(yi, measuredMoistureTemp) - 2);
+  myGLCD.fillRect(moistureSetterBarButtonLimits.X1, moistureSetterBarButtonLimits.Y1 - 2, moistureSetterBarButtonLimits.X2, min(yi, measuredMoistureRaw) - 2);
+  myGLCD.fillRect(moistureSetterBarButtonLimits.X1, max(yi, measuredMoistureRaw) + 2, moistureSetterBarButtonLimits.X2, moistureSetterBarButtonLimits.Y2 + 2);
+  myGLCD.fillRect(moistureSetterBarButtonLimits.X1, min(yi, measuredMoistureRaw) + 2, moistureSetterBarButtonLimits.X2, max(yi, measuredMoistureRaw) - 2);
 
   /*
-  if ((expectedMoistureTemp >= measuredMoistureTemp) && (expectedMoistureTemp <= (measuredMoistureTemp + 5)))
+  if ((expectedMoistureTemp >= measuredMoistureRaw) && (expectedMoistureTemp <= (measuredMoistureRaw + 5)))
   {
     myGLCD.setColor(255, 0, 0);
     myGLCD.fillRect(moistureSetterBarButtonLimits.X1, expectedMoistureTemp, moistureSetterBarButtonLimits.X2, (expectedMoistureTemp + 2)); // positioner
@@ -465,17 +422,17 @@ void refreshMoistureBar()
     myGLCD.fillRect(moistureSetterBarButtonLimits.X1, moistureSetterBarButtonLimits.Y1, moistureSetterBarButtonLimits.X2, (expectedMoistureTemp - 1));
     myGLCD.fillRect(moistureSetterBarButtonLimits.X1, (expectedMoistureTemp + 6), moistureSetterBarButtonLimits.X2, moistureSetterBarButtonLimits.Y2);
   }
-  else if ((measuredMoistureTemp >= expectedMoistureTemp) && (measuredMoistureTemp <= (expectedMoistureTemp + 5)))
+  else if ((measuredMoistureRaw >= expectedMoistureTemp) && (measuredMoistureRaw <= (expectedMoistureTemp + 5)))
   {
     myGLCD.setColor(255, 255, 255);
-    myGLCD.fillRect(moistureSetterBarButtonLimits.X1, measuredMoistureTemp, moistureSetterBarButtonLimits.X2, (measuredMoistureTemp + 2)); // positioner
+    myGLCD.fillRect(moistureSetterBarButtonLimits.X1, measuredMoistureRaw, moistureSetterBarButtonLimits.X2, (measuredMoistureRaw + 2)); // positioner
 
     myGLCD.setColor(255, 0, 0);
-    myGLCD.fillRect(moistureSetterBarButtonLimits.X1, measuredMoistureTemp + 3, moistureSetterBarButtonLimits.X2, (measuredMoistureTemp + 5)); // positioner
+    myGLCD.fillRect(moistureSetterBarButtonLimits.X1, measuredMoistureRaw + 3, moistureSetterBarButtonLimits.X2, (measuredMoistureRaw + 5)); // positioner
 
     myGLCD.setColor(255, 255, 0);
-    myGLCD.fillRect(moistureSetterBarButtonLimits.X1, moistureSetterBarButtonLimits.Y1, moistureSetterBarButtonLimits.X2, (measuredMoistureTemp - 1));
-    myGLCD.fillRect(moistureSetterBarButtonLimits.X1, (measuredMoistureTemp + 6), moistureSetterBarButtonLimits.X2, moistureSetterBarButtonLimits.Y2);
+    myGLCD.fillRect(moistureSetterBarButtonLimits.X1, moistureSetterBarButtonLimits.Y1, moistureSetterBarButtonLimits.X2, (measuredMoistureRaw - 1));
+    myGLCD.fillRect(moistureSetterBarButtonLimits.X1, (measuredMoistureRaw + 6), moistureSetterBarButtonLimits.X2, moistureSetterBarButtonLimits.Y2);
   }
   else
   {
@@ -484,12 +441,12 @@ void refreshMoistureBar()
     myGLCD.fillRect(moistureSetterBarButtonLimits.X1, expectedMoistureTemp, moistureSetterBarButtonLimits.X2, (expectedMoistureTemp + 4)); // positioner
 
     myGLCD.setColor(255, 0, 0);
-    myGLCD.fillRect(moistureSetterBarButtonLimits.X1, measuredMoistureTemp, moistureSetterBarButtonLimits.X2, (measuredMoistureTemp + 4)); // positioner
+    myGLCD.fillRect(moistureSetterBarButtonLimits.X1, measuredMoistureRaw, moistureSetterBarButtonLimits.X2, (measuredMoistureRaw + 4)); // positioner
 
     myGLCD.setColor(255, 255, 0);
-    myGLCD.fillRect(moistureSetterBarButtonLimits.X1, moistureSetterBarButtonLimits.Y1, moistureSetterBarButtonLimits.X2, (min(measuredMoistureTemp, expectedMoistureTemp)));
-    myGLCD.fillRect(moistureSetterBarButtonLimits.X1, (min(measuredMoistureTemp, expectedMoistureTemp) + 5), moistureSetterBarButtonLimits.X2, (max(measuredMoistureTemp, expectedMoistureTemp) - 1));
-    myGLCD.fillRect(moistureSetterBarButtonLimits.X1, (max(measuredMoistureTemp, expectedMoistureTemp) + 5), moistureSetterBarButtonLimits.X2, moistureSetterBarButtonLimits.Y2 + 5);
+    myGLCD.fillRect(moistureSetterBarButtonLimits.X1, moistureSetterBarButtonLimits.Y1, moistureSetterBarButtonLimits.X2, (min(measuredMoistureRaw, expectedMoistureTemp)));
+    myGLCD.fillRect(moistureSetterBarButtonLimits.X1, (min(measuredMoistureRaw, expectedMoistureTemp) + 5), moistureSetterBarButtonLimits.X2, (max(measuredMoistureRaw, expectedMoistureTemp) - 1));
+    myGLCD.fillRect(moistureSetterBarButtonLimits.X1, (max(measuredMoistureRaw, expectedMoistureTemp) + 5), moistureSetterBarButtonLimits.X2, moistureSetterBarButtonLimits.Y2 + 5);
   }
   */
   refreshMoistureBarOnNextLoopCycle = false;
@@ -526,28 +483,28 @@ void refreshPumpControlScreen()
 void timer_isr()
 {
   readSensorWithNextLoopCycle = true;
-  readTemperatureWithNextLoopCycle = true;
+  temperatureMeasureCounter++;
 }
 
-void readSensor()
+void readMoistureSensor()
 {
   measuredMoisture = analogRead(pump1.sensorPin);
 }
 
 void proceedSensorData()
 {
-  measuredMoistureTemp = map(measuredMoisture, minimumMoisture, maximumMoisture, moistureSetterBarButtonLimits.Y1, moistureSetterBarButtonLimits.Y2);
+  measuredMoistureRaw = map(measuredMoisture, minimumMoisture, maximumMoisture, moistureSetterBarButtonLimits.Y1, moistureSetterBarButtonLimits.Y2);
 
-  if (measuredMoistureTemp < moistureSetterBarButtonLimits.Y1)
+  if (measuredMoistureRaw < moistureSetterBarButtonLimits.Y1)
   {
-    measuredMoistureTemp = moistureSetterBarButtonLimits.Y1;
+    measuredMoistureRaw = moistureSetterBarButtonLimits.Y1;
   }
-  else if (measuredMoistureTemp > moistureSetterBarButtonLimits.Y2)
+  else if (measuredMoistureRaw > moistureSetterBarButtonLimits.Y2)
   {
-    measuredMoistureTemp = moistureSetterBarButtonLimits.Y2;
+    measuredMoistureRaw = moistureSetterBarButtonLimits.Y2;
   }
 
-  measuredMoisturePercent = map(measuredMoistureTemp, moistureSetterBarButtonLimits.Y2, moistureSetterBarButtonLimits.Y1, 0, 100);
+  measuredMoisturePercent = map(measuredMoistureRaw, moistureSetterBarButtonLimits.Y2, moistureSetterBarButtonLimits.Y1, 0, 100);
 }
 
 bool isSoilTooDry()
@@ -565,7 +522,9 @@ bool isSoilTooDry()
 void requestTemperature()
 {
   temperatureSensors.requestTemperatures();
+
   refreshTemperatureDisplayOnNextLoopCycle = true;
+  temperatureMeasureCounter = 0;
 }
 
 void setup()
@@ -603,17 +562,16 @@ void loop()
 
   if (readSensorWithNextLoopCycle)
   {
-    readSensor();
+    readMoistureSensor();
     proceedSensorData();
     readSensorWithNextLoopCycle = false;
     refreshMeasuredMoistureDisplayValueOnNextLoopCycle = true;
     refreshMoistureBarOnNextLoopCycle = true;
   }
 
-  if (readTemperatureWithNextLoopCycle)
+  if (temperatureMeasureCounter == temperatureMeasureIntervallInSes)
   {
     requestTemperature();
-    readTemperatureWithNextLoopCycle = false;
   }
 
   // Home Screen
@@ -628,15 +586,7 @@ void loop()
 
     refreshHomeScreen();
   }
-  else if (currentPage == "LOVE")
-  {
-    if (!loveScreenIsInitialized)
-    {
-      initializeLoveScreen();
-    }
-    
-    handleLoveScreenInput();
-  }
+  
   else if (currentPage == "MOT1")
   {
     if (!pumpScreen1IsInitialized)
