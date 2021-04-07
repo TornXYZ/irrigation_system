@@ -11,6 +11,7 @@
 #define SCREEN_WIDTH 320
 #define SCREEN_HEIGHT 280
 #define ONE_WIRE_BUS A7
+#define PUMP_PIN 8
 
 // Initialize display
 UTFT myGLCD(ILI9341_16, 38, 39, 40, 41);
@@ -24,13 +25,20 @@ OneWire oneWire(ONE_WIRE_BUS);
 // Pass OneWire reference to Dallas Temperature
 DallasTemperature temperatureSensors(&oneWire);
 
-// Initialize first flowerpot
-flowerpotMetadata flowerpot1{1, 8, A0, false, false, 0, 0, 0, 0};
+// Initialize pots
+flowerpotMetadata pot1{9, A0, 0, false, false, false, 0, 0, 0, 0, 0};
+flowerpotMetadata pot2{};
+flowerpotMetadata pot3{};
+
+flowerpotMetadata allPots[] = {pot1, pot2, pot3};
+
+uint8_t currentPotToWater = 0;
+
+uint8_t potsMoistureState = 0;  //should be a bitset, which describes which pot needs watering. LSB equals pot 1.
 
 // Defining variables
 extern uint8_t SmallFont[];
 extern uint8_t BigFont[];
-extern uint8_t SevenSegNumFont[];
 extern const unsigned int under_construction[];
 long x, y;
 String currentPage = "HOME";
@@ -42,9 +50,11 @@ const uint16_t minimumMoisture = 200;
 const uint16_t maximumMoisture = 700;
 
 uint16_t yi = 100;
-uint16_t measuredMoistureRaw = 100;
+// uint16_t measuredMoistureRaw = 100;
 
-bool readSensorWithNextLoopCycle = true;
+bool pumpIsOn = false;
+
+bool readSensorsWithNextLoopCycle = true;
 bool refreshExpectedMoistureDisplayValueOnNextLoopCycle = true;
 bool refreshMeasuredMoistureDisplayValueOnNextLoopCycle = true;
 bool refreshPumpOnOffButtonOnNextLoopCycle = true;
@@ -54,7 +64,7 @@ bool refreshTemperatureDisplayOnNextLoopCycle = true;
 bool refreshThermometerDisplayOnNextLoopCycle = true;
 
 bool homeScreenIsInitialized = false;
-bool pumpScreen1IsInitialized = false;
+bool potScreenIsInitialized = false;
 bool underConstructionScreenIsInitialized = false;
 
 // Highlights the button when pressed
@@ -153,7 +163,7 @@ void initializeHomeScreen()
 
   for (uint8_t i = thermometerOuterLimits.Y2; i >= thermometerOuterLimits.Y1; i -= (thermometerOuterLimits.Y2 - thermometerOuterLimits.Y1) / 4)
   {
-    myGLCD.printNumI(tempScale, thermometerOuterLimits.X1 - 20, i - 5);
+    myGLCD.printNumI(tempScale, thermometerOuterLimits.X1 - 18, i - 10);
     tempScale += 10;
   }
 
@@ -229,7 +239,7 @@ void refreshThermometerDisplay()
     myGLCD.fillRect(thermometerInnerLimits.X1, temperatureTemp, thermometerInnerLimits.X2, thermometerInnerLimits.Y2);
   }
 
-  for (uint8_t i = thermometerOuterLimits.Y2; i >= thermometerOuterLimits.Y1; i -= (thermometerOuterLimits.Y2 - thermometerOuterLimits.Y1) / 9)
+  for (uint8_t i = thermometerOuterLimits.Y2 - 7; i >= thermometerOuterLimits.Y1 - 7; i -= (thermometerOuterLimits.Y2 - thermometerOuterLimits.Y1) / 9)
   {
     myGLCD.setColor(255, 255, 255);
     myGLCD.fillRect(thermometerOuterLimits.X1, i - 1, thermometerOuterLimits.X1 + 7, i + 1);
@@ -275,7 +285,7 @@ void handleUnderConstructionScreenInput()
 }
 
 // PUMP CONTROL SCREEN
-void initializePumpControlScreen()
+void initializePotScreen()
 {
   drawHeadline("PUMP CONTROL");
 
@@ -293,10 +303,10 @@ void initializePumpControlScreen()
 
   drawReturnField();
 
-  pumpScreen1IsInitialized = true;
+  potScreenIsInitialized = true;
 }
 
-void resetPumpControlScreen1Bools()
+void resetPotScreenBools()
 {
   refreshExpectedMoistureDisplayValueOnNextLoopCycle = true;
   refreshMeasuredMoistureDisplayValueOnNextLoopCycle = true;
@@ -305,31 +315,13 @@ void resetPumpControlScreen1Bools()
   refreshMoistureBarOnNextLoopCycle = true;
 }
 
-void handlePumpControlScreen1Input()
+void handlePotScreenInput(flowerpotMetadata pot)
 {
   if (myTouch.dataAvailable())
   {
     myTouch.read();
     x = myTouch.getX();
     y = myTouch.getY() * (-1) + 240;
-
-    // PRESS PUMPSWITCH BUTTON
-    if (pointIsInsideButtonLimits(x, y, pumpOnOffButtonLimits))
-    {
-      drawFrame(pumpOnOffButtonLimits);
-      togglePumpState(flowerpot1, false);
-      refreshPumpOnOffButtonOnNextLoopCycle = true;
-      refreshPumpAutoModeButtonOnNextLoopCycle = true;
-    }
-
-    // PRESS AUTOSWITCH BUTTON
-    if (pointIsInsideButtonLimits(x, y, autoOnOffButtonLimits))
-    {
-      drawFrame(autoOnOffButtonLimits);
-      toggleAutoModeState(flowerpot1, false);
-      refreshPumpAutoModeButtonOnNextLoopCycle = true;
-      refreshPumpOnOffButtonOnNextLoopCycle = true;
-    }
 
     // SET EXPECTED MOISTURE
     if (pointIsInsideButtonLimits(x, y, moistureSetterBarButtonLimits))
@@ -348,8 +340,8 @@ void handlePumpControlScreen1Input()
       }
 
       // calculate calibrated moisture values
-      flowerpot1.expectedMoisture = map(yi, moistureSetterBarButtonLimits.Y2, moistureSetterBarButtonLimits.Y1, minimumMoisture, maximumMoisture);
-      flowerpot1.expectedMoisturePercent = map(yi, moistureSetterBarButtonLimits.Y2, moistureSetterBarButtonLimits.Y1, 0, 100);
+      pot.expectedMoisture = map(yi, moistureSetterBarButtonLimits.Y2, moistureSetterBarButtonLimits.Y1, minimumMoisture, maximumMoisture);
+      pot.expectedMoisturePercent = map(yi, moistureSetterBarButtonLimits.Y2, moistureSetterBarButtonLimits.Y1, 0, 100);
 
       refreshExpectedMoistureDisplayValueOnNextLoopCycle = true;
       refreshMoistureBarOnNextLoopCycle = true;
@@ -361,68 +353,12 @@ void handlePumpControlScreen1Input()
       drawFrame(20, 60, 80, 100); // Custom Function -Highlighs the buttons when it's pressed
       currentPage = "HOME";
       myGLCD.clrScr();        // Clears the screen
-      pumpScreen1IsInitialized = false;
+      potScreenIsInitialized = false;
     }
   }
 }
 
-void refreshPumpControlButton()
-{
-  if (flowerpot1.isOn == false)
-  {
-    myGLCD.setColor(255, 0, 0);                                                                                                   // Sets color to red
-    myGLCD.fillRoundRect(pumpOnOffButtonLimits.X1, pumpOnOffButtonLimits.Y1, pumpOnOffButtonLimits.X2, pumpOnOffButtonLimits.Y2); // Draws filled rounded rectangle
-    myGLCD.setColor(255, 255, 255);                                                                                               // Sets color to white
-    myGLCD.drawRoundRect(pumpOnOffButtonLimits.X1, pumpOnOffButtonLimits.Y1, pumpOnOffButtonLimits.X2, pumpOnOffButtonLimits.Y2); // Draws rounded rectangle without a fill, so the overall appearance of the button looks like it has a frame
-    myGLCD.setFont(SmallFont);                                                                                                    // Sets the font
-    myGLCD.setBackColor(255, 0, 0);                                                                                               // Sets the background color of the area where the text will be printed to green, same as the button
-    myGLCD.print("PUMP", 95, 65);
-    myGLCD.print("OFF", 95, 95); // Prints the string
-  }
-  else
-  {
-    myGLCD.setColor(0, 255, 0);                                                                                                   // Sets color to green
-    myGLCD.fillRoundRect(pumpOnOffButtonLimits.X1, pumpOnOffButtonLimits.Y1, pumpOnOffButtonLimits.X2, pumpOnOffButtonLimits.Y2); // Draws filled rounded rectangle
-    myGLCD.setColor(255, 255, 255);                                                                                               // Sets color to white
-    myGLCD.drawRoundRect(pumpOnOffButtonLimits.X1, pumpOnOffButtonLimits.Y1, pumpOnOffButtonLimits.X2, pumpOnOffButtonLimits.Y2); // Draws rounded rectangle without a fill, so the overall appearance of the button looks like it has a frame
-    myGLCD.setFont(SmallFont);                                                                                                    // Sets the font
-    myGLCD.setBackColor(0, 255, 0);                                                                                               // Sets the background color of the area where the text will be printed to green, same as the button
-    myGLCD.print("PUMP", 95, 65);
-    myGLCD.print("ON", 95, 95); // Prints the string
-  }
-
-  refreshPumpOnOffButtonOnNextLoopCycle = false;
-}
-
-void refreshAutoModeButton()
-{
-  if (flowerpot1.isInAutoMode == false)
-  {
-    myGLCD.setColor(255, 0, 0);                                                                                                   // Sets color to red
-    myGLCD.fillRoundRect(autoOnOffButtonLimits.X1, autoOnOffButtonLimits.Y1, autoOnOffButtonLimits.X2, autoOnOffButtonLimits.Y2); // Draws filled rounded rectangle
-    myGLCD.setColor(255, 255, 255);                                                                                               // Sets color to white
-    myGLCD.drawRoundRect(autoOnOffButtonLimits.X1, autoOnOffButtonLimits.Y1, autoOnOffButtonLimits.X2, autoOnOffButtonLimits.Y2); // Draws rounded rectangle without a fill, so the overall appearance of the button looks like it has a frame
-    myGLCD.setFont(SmallFont);                                                                                                    // Sets the font
-    myGLCD.setBackColor(255, 0, 0);                                                                                               // Sets the background color of the area where the text will be printed to green, same as the button
-    myGLCD.print("AUTO", 160, 65);
-    myGLCD.print("OFF", 160, 95); // Prints the string
-  }
-  else
-  {
-    myGLCD.setColor(0, 255, 0);                                                                                                   // Sets color to green
-    myGLCD.fillRoundRect(autoOnOffButtonLimits.X1, autoOnOffButtonLimits.Y1, autoOnOffButtonLimits.X2, autoOnOffButtonLimits.Y2); // Draws filled rounded rectangle
-    myGLCD.setColor(255, 255, 255);                                                                                               // Sets color to white
-    myGLCD.drawRoundRect(autoOnOffButtonLimits.X1, autoOnOffButtonLimits.Y1, autoOnOffButtonLimits.X2, autoOnOffButtonLimits.Y2); // Draws rounded rectangle without a fill, so the overall appearance of the button looks like it has a frame
-    myGLCD.setFont(SmallFont);                                                                                                    // Sets the font
-    myGLCD.setBackColor(0, 255, 0);                                                                                               // Sets the background color of the area where the text will be printed to green, same as the button
-    myGLCD.print("AUTO", 160, 65);
-    myGLCD.print("ON", 160, 95); // Prints the string
-  }
-
-  refreshPumpAutoModeButtonOnNextLoopCycle = false;
-}
-
-void refreshExpectedMoistureValue()
+void refreshExpectedMoistureValue(flowerpotMetadata pot)
 {
   myGLCD.setColor(0, 0, 0);
   myGLCD.fillRect(20, 120, 120, 179);
@@ -430,14 +366,14 @@ void refreshExpectedMoistureValue()
   myGLCD.setColor(255, 255, 255);
   myGLCD.setFont(BigFont);
   myGLCD.print("expected:", 20, 120);
-  myGLCD.printNumI(flowerpot1.expectedMoisture, 20, 140, 3);
-  myGLCD.printNumI(flowerpot1.expectedMoisturePercent, 20, 160, 3);
+  myGLCD.printNumI(pot.expectedMoisture, 20, 140, 3);
+  myGLCD.printNumI(pot.expectedMoisturePercent, 20, 160, 3);
   myGLCD.printChar('%', 70, 160);
 
   refreshExpectedMoistureDisplayValueOnNextLoopCycle = false;
 }
 
-void refreshMeasuredMoistureValue()
+void refreshMeasuredMoistureValue(flowerpotMetadata pot)
 {
   myGLCD.setColor(0, 0, 0);
   myGLCD.fillRect(20, 180, 120, 239);
@@ -445,121 +381,177 @@ void refreshMeasuredMoistureValue()
   myGLCD.setColor(255, 255, 255);
   myGLCD.setFont(BigFont);
   myGLCD.print("measured:", 20, 180);
-  myGLCD.printNumI(flowerpot1.measuredMoisture, 20, 200, 3);
-  myGLCD.printNumI(flowerpot1.measuredMoisturePercent, 20, 220, 3);
+  myGLCD.printNumI(pot.measuredMoisture, 20, 200, 3);
+  myGLCD.printNumI(pot.measuredMoisturePercent, 20, 220, 3);
   myGLCD.printChar('%', 70, 220);
 
   refreshMeasuredMoistureDisplayValueOnNextLoopCycle = false;
 }
 
-void refreshMoistureBar()
+void refreshMoistureBar(flowerpotMetadata pot)
 {
-
   myGLCD.setColor(255, 255, 255);
   myGLCD.fillRect(moistureSetterBarButtonLimits.X1, yi + 2, moistureSetterBarButtonLimits.X2, yi - 2);
   myGLCD.setColor(255, 0, 0);
-  myGLCD.fillRect(moistureSetterBarButtonLimits.X1, measuredMoistureRaw + 2, moistureSetterBarButtonLimits.X2, measuredMoistureRaw - 2);
+  myGLCD.fillRect(moistureSetterBarButtonLimits.X1, pot.measuredMoistureRaw + 2, moistureSetterBarButtonLimits.X2, pot.measuredMoistureRaw - 2);
   myGLCD.setColor(255, 255, 0);
-  myGLCD.fillRect(moistureSetterBarButtonLimits.X1, moistureSetterBarButtonLimits.Y1 - 2, moistureSetterBarButtonLimits.X2, min(yi, measuredMoistureRaw) - 2);
-  myGLCD.fillRect(moistureSetterBarButtonLimits.X1, max(yi, measuredMoistureRaw) + 2, moistureSetterBarButtonLimits.X2, moistureSetterBarButtonLimits.Y2 + 2);
-  myGLCD.fillRect(moistureSetterBarButtonLimits.X1, min(yi, measuredMoistureRaw) + 2, moistureSetterBarButtonLimits.X2, max(yi, measuredMoistureRaw) - 2);
+  myGLCD.fillRect(moistureSetterBarButtonLimits.X1, moistureSetterBarButtonLimits.Y1 - 2, moistureSetterBarButtonLimits.X2, min(yi, pot.measuredMoistureRaw) - 2);
+  myGLCD.fillRect(moistureSetterBarButtonLimits.X1, max(yi, pot.measuredMoistureRaw) + 2, moistureSetterBarButtonLimits.X2, moistureSetterBarButtonLimits.Y2 + 2);
+  myGLCD.fillRect(moistureSetterBarButtonLimits.X1, min(yi, pot.measuredMoistureRaw) + 2, moistureSetterBarButtonLimits.X2, max(yi, pot.measuredMoistureRaw) - 2);
 
-  /*
-  if ((expectedMoistureTemp >= measuredMoistureRaw) && (expectedMoistureTemp <= (measuredMoistureRaw + 5)))
-  {
-    myGLCD.setColor(255, 0, 0);
-    myGLCD.fillRect(moistureSetterBarButtonLimits.X1, expectedMoistureTemp, moistureSetterBarButtonLimits.X2, (expectedMoistureTemp + 2)); // positioner
-
-    myGLCD.setColor(255, 255, 255);
-    myGLCD.fillRect(moistureSetterBarButtonLimits.X1, expectedMoistureTemp + 3, moistureSetterBarButtonLimits.X2, (expectedMoistureTemp + 5)); // positioner
-
-    myGLCD.setColor(255, 255, 0);
-    myGLCD.fillRect(moistureSetterBarButtonLimits.X1, moistureSetterBarButtonLimits.Y1, moistureSetterBarButtonLimits.X2, (expectedMoistureTemp - 1));
-    myGLCD.fillRect(moistureSetterBarButtonLimits.X1, (expectedMoistureTemp + 6), moistureSetterBarButtonLimits.X2, moistureSetterBarButtonLimits.Y2);
-  }
-  else if ((measuredMoistureRaw >= expectedMoistureTemp) && (measuredMoistureRaw <= (expectedMoistureTemp + 5)))
-  {
-    myGLCD.setColor(255, 255, 255);
-    myGLCD.fillRect(moistureSetterBarButtonLimits.X1, measuredMoistureRaw, moistureSetterBarButtonLimits.X2, (measuredMoistureRaw + 2)); // positioner
-
-    myGLCD.setColor(255, 0, 0);
-    myGLCD.fillRect(moistureSetterBarButtonLimits.X1, measuredMoistureRaw + 3, moistureSetterBarButtonLimits.X2, (measuredMoistureRaw + 5)); // positioner
-
-    myGLCD.setColor(255, 255, 0);
-    myGLCD.fillRect(moistureSetterBarButtonLimits.X1, moistureSetterBarButtonLimits.Y1, moistureSetterBarButtonLimits.X2, (measuredMoistureRaw - 1));
-    myGLCD.fillRect(moistureSetterBarButtonLimits.X1, (measuredMoistureRaw + 6), moistureSetterBarButtonLimits.X2, moistureSetterBarButtonLimits.Y2);
-  }
-  else
-  {
-    // Draw bar with positioner
-    myGLCD.setColor(255, 255, 255);
-    myGLCD.fillRect(moistureSetterBarButtonLimits.X1, expectedMoistureTemp, moistureSetterBarButtonLimits.X2, (expectedMoistureTemp + 4)); // positioner
-
-    myGLCD.setColor(255, 0, 0);
-    myGLCD.fillRect(moistureSetterBarButtonLimits.X1, measuredMoistureRaw, moistureSetterBarButtonLimits.X2, (measuredMoistureRaw + 4)); // positioner
-
-    myGLCD.setColor(255, 255, 0);
-    myGLCD.fillRect(moistureSetterBarButtonLimits.X1, moistureSetterBarButtonLimits.Y1, moistureSetterBarButtonLimits.X2, (min(measuredMoistureRaw, expectedMoistureTemp)));
-    myGLCD.fillRect(moistureSetterBarButtonLimits.X1, (min(measuredMoistureRaw, expectedMoistureTemp) + 5), moistureSetterBarButtonLimits.X2, (max(measuredMoistureRaw, expectedMoistureTemp) - 1));
-    myGLCD.fillRect(moistureSetterBarButtonLimits.X1, (max(measuredMoistureRaw, expectedMoistureTemp) + 5), moistureSetterBarButtonLimits.X2, moistureSetterBarButtonLimits.Y2 + 5);
-  }
-  */
   refreshMoistureBarOnNextLoopCycle = false;
 }
 
-void refreshPumpControlScreen()
+void refreshPotScreen(flowerpotMetadata pot)
 {
-  if (refreshPumpOnOffButtonOnNextLoopCycle)
-  {
-    refreshPumpControlButton();
-  }
-
-  if (refreshPumpAutoModeButtonOnNextLoopCycle)
-  {
-    refreshAutoModeButton();
-  }
-
   if (refreshExpectedMoistureDisplayValueOnNextLoopCycle)
   {
-    refreshExpectedMoistureValue();
+    refreshExpectedMoistureValue(pot);
   }
 
   if (refreshMeasuredMoistureDisplayValueOnNextLoopCycle)
   {
-    refreshMeasuredMoistureValue();
+    refreshMeasuredMoistureValue(pot);
   }
 
   if (refreshMoistureBarOnNextLoopCycle)
   {
-    refreshMoistureBar();
+    refreshMoistureBar(pot);
   }
 }
 
 void timer_isr()
 {
-  readSensorWithNextLoopCycle = true;
+  readSensorsWithNextLoopCycle = true;
   temperatureMeasureCounter++;
 }
 
-void readMoistureSensor()
-{
-  flowerpot1.measuredMoisture = analogRead(flowerpot1.sensorPin);
+void readAllMoistureSensors()
+{  
+  for (size_t i = 0; i < sizeof(allPots); i++)
+  {
+    if (allPots[i].potIsActive)
+    {
+      allPots[i].measuredMoisture = analogRead(allPots[i].sensorPin);
+    }
+  }
 }
 
 void proceedSensorData()
 {
-  measuredMoistureRaw = map(flowerpot1.measuredMoisture, minimumMoisture, maximumMoisture, moistureSetterBarButtonLimits.Y1, moistureSetterBarButtonLimits.Y2);
-
-  if (measuredMoistureRaw < moistureSetterBarButtonLimits.Y1)
+  for (size_t i = 0; i < sizeof(allPots); i++)
   {
-    measuredMoistureRaw = moistureSetterBarButtonLimits.Y1;
-  }
-  else if (measuredMoistureRaw > moistureSetterBarButtonLimits.Y2)
+  allPots[i].measuredMoistureRaw = map(allPots[i].measuredMoisture, minimumMoisture, maximumMoisture, moistureSetterBarButtonLimits.Y1, moistureSetterBarButtonLimits.Y2);
+
+  if (allPots[i].measuredMoistureRaw < moistureSetterBarButtonLimits.Y1)
   {
-    measuredMoistureRaw = moistureSetterBarButtonLimits.Y2;
+    allPots[i].measuredMoistureRaw = moistureSetterBarButtonLimits.Y1;
+  }
+  else if (allPots[i].measuredMoistureRaw > moistureSetterBarButtonLimits.Y2)
+  {
+    allPots[i].measuredMoistureRaw = moistureSetterBarButtonLimits.Y2;
   }
 
-  flowerpot1.measuredMoisturePercent = map(measuredMoistureRaw, moistureSetterBarButtonLimits.Y2, moistureSetterBarButtonLimits.Y1, 0, 100);
+  allPots[i].measuredMoisturePercent = map(allPots[i].measuredMoistureRaw, moistureSetterBarButtonLimits.Y2, moistureSetterBarButtonLimits.Y1, 0, 100);
+  }
+
+}
+
+void checkSoilStates()
+{
+  for (size_t i = 0; i < sizeof(allPots); i++)
+  {
+    if (allPots[i].potIsActive && allPots[i].isSoilTooDry())
+    {
+      allPots[i].soilNeedsWater = true;
+      bitSet(potsMoistureState, i);
+    }
+    else
+    {
+      allPots[i].soilNeedsWater = false;
+      bitClear(potsMoistureState, i);
+    }
+  }
+}
+
+uint8_t getPotWithHighestPriority()
+{
+  uint8_t currentHighestPriority = 0;
+  uint8_t potID = 0;
+
+  for (size_t i = 0; i < sizeof(allPots); i++)
+  {
+    if (allPots[i].priority > currentHighestPriority)
+    {
+      currentHighestPriority = allPots[i].priority;
+      potID = i;
+    }
+  }
+
+  return potID;
+}
+
+void updatePriorities()
+{
+  for (size_t i = 0; i < sizeof(allPots); i++)
+  {
+    if (allPots[i].soilNeedsWater)
+    {
+      allPots[i].priority++;
+    }
+    else
+    {
+      allPots[i].priority = 0;
+    }
+  } 
+}
+
+void choosePotToWater()
+{
+  currentPotToWater = getPotWithHighestPriority();
+}
+
+void manageValves()
+{
+  for (size_t i = 0; i < sizeof(allPots); i++)
+  {
+    if (i == currentPotToWater)
+    {
+      allPots[i].openValve();
+      allPots[i].valveIsOpen = true;
+    }
+    else
+    {
+      allPots[i].closeValve();
+      allPots[i].valveIsOpen = false;
+    }
+  }
+}
+
+void startPump()
+{
+  digitalWrite(PUMP_PIN, HIGH);
+  
+  pumpIsOn = true;
+}
+
+void stopPump()
+{
+  digitalWrite(PUMP_PIN, LOW);
+  
+  pumpIsOn = false;
+}
+
+void managePump()
+{
+  if (potsMoistureState > 0)
+  {
+    startPump();
+  }
+  else
+  {
+    stopPump();
+  }
 }
 
 void requestTemperature()
@@ -574,13 +566,18 @@ void requestTemperature()
 void setup()
 {
   Serial.begin(9600);
+  Serial.println("setup");
   temperatureSensors.begin();
   temperatureSensors.requestTemperatures();
 
   Timer1.initialize(1000000);
   Timer1.attachInterrupt(timer_isr);
 
-  pinMode(flowerpot1.actorPin, OUTPUT);
+  for (size_t i = 0; i < sizeof(allPots); i++)
+  {
+    pinMode(allPots[i].valvePin, OUTPUT);
+  }
+
   myGLCD.InitLCD();
   myGLCD.clrScr();
 
@@ -592,29 +589,30 @@ void setup()
 
 void loop()
 {
-  if (flowerpot1.isInAutoMode)
+  if (readSensorsWithNextLoopCycle)
   {
-    if (flowerpot1.isSoilTooDry())
-    {
-      startPump(flowerpot1);
-    }
-    else
-    {
-      stopPump(flowerpot1);
-    }
-  }
-
-  if (readSensorWithNextLoopCycle)
-  {
-    readMoistureSensor();
+    Serial.println("read Sensors");
+    readAllMoistureSensors();
     proceedSensorData();
-    readSensorWithNextLoopCycle = false;
+    readSensorsWithNextLoopCycle = false;
     refreshMeasuredMoistureDisplayValueOnNextLoopCycle = true;
     refreshMoistureBarOnNextLoopCycle = true;
+
+    checkSoilStates();
+
+    updatePriorities();
+
+    choosePotToWater();
+
+    manageValves();
+
+    managePump();
   }
+  
 
   if (temperatureMeasureCounter >= temperatureMeasureIntervallInSec)
   {
+    Serial.println("request temperature");
     requestTemperature();
   }
 
@@ -626,6 +624,7 @@ void loop()
       initializeHomeScreen();
     }
 
+    Serial.println("handle home screen input");
     handleHomeScreenInput();
 
     refreshHomeScreen();
@@ -633,15 +632,15 @@ void loop()
   
   else if (currentPage == "MOT1")
   {
-    if (!pumpScreen1IsInitialized)
+    if (!potScreenIsInitialized)
     {
-      initializePumpControlScreen();
-      resetPumpControlScreen1Bools();
+      initializePotScreen();
+      resetPotScreenBools();
     }
 
-    handlePumpControlScreen1Input();
+    handlePotScreenInput(allPots[0]);
 
-    refreshPumpControlScreen();
+    refreshPotScreen(allPots[0]);
   }
 
   else if (currentPage == "MOT2" || currentPage == "MOT3")
