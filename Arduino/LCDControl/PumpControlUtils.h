@@ -1,8 +1,15 @@
+enum EScreenState {
+  HOME,
+  POT1,
+  POT2,
+  POT3
+};
+
 class flowerpotMetadata
 {
   public:
-  uint8_t valvePin;
-  uint8_t sensorPin;
+  const uint8_t valvePin;
+  const uint8_t sensorPin;
   uint8_t priority;
 
   bool potIsActive;
@@ -10,6 +17,7 @@ class flowerpotMetadata
   bool valveIsOpen;
 
   uint16_t measuredMoistureRaw;
+  uint16_t expectedMoistureRaw;
   uint16_t expectedMoisture;
   uint16_t expectedMoisturePercent;
   uint16_t measuredMoisture;

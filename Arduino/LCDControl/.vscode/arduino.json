@@ -3,5 +3,6 @@
     "configuration": "cpu=atmega2560",
     "programmer": "AVR ISP",
     "port": "COM10",
-    "sketch": "LCDControl.ino"
+    "sketch": "LCDControl.ino",
+    "output": ".\\build"
 }
