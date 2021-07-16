@@ -1,0 +1,72 @@
+[
+  {
+    "Sourcefile": null,
+    "Include": "",
+    "Includepath": "C:\\Program Files (x86)\\Arduino\\hardware\\arduino\\avr\\cores\\arduino"
+  },
+  {
+    "Sourcefile": null,
+    "Include": "",
+    "Includepath": "C:\\Program Files (x86)\\Arduino\\hardware\\arduino\\avr\\variants\\mega"
+  },
+  {
+    "Sourcefile": "d:\\Projekte\\Bewässerungssystem\\repo\\Arduino\\IrrigationSystem\\build\\sketch\\IrrigationSystem.ino.cpp",
+    "Include": "UTFT.h",
+    "Includepath": "C:\\Users\\Thoren Grube\\Documents\\Arduino\\libraries\\UTFT"
+  },
+  {
+    "Sourcefile": "d:\\Projekte\\Bewässerungssystem\\repo\\Arduino\\IrrigationSystem\\build\\sketch\\IrrigationSystem.ino.cpp",
+    "Include": "URTouch.h",
+    "Includepath": "C:\\Users\\Thoren Grube\\Documents\\Arduino\\libraries\\URTouch"
+  },
+  {
+    "Sourcefile": "d:\\Projekte\\Bewässerungssystem\\repo\\Arduino\\IrrigationSystem\\build\\sketch\\IrrigationSystem.ino.cpp",
+    "Include": "TimerOne.h",
+    "Includepath": "C:\\Users\\Thoren Grube\\Documents\\Arduino\\libraries\\TimerOne-master"
+  },
+  {
+    "Sourcefile": "d:\\Projekte\\Bewässerungssystem\\repo\\Arduino\\IrrigationSystem\\build\\sketch\\IrrigationSystem.ino.cpp",
+    "Include": "OneWire.h",
+    "Includepath": "C:\\Users\\Thoren Grube\\Documents\\Arduino\\libraries\\OneWire"
+  },
+  {
+    "Sourcefile": "d:\\Projekte\\Bewässerungssystem\\repo\\Arduino\\IrrigationSystem\\build\\sketch\\IrrigationSystem.ino.cpp",
+    "Include": "DallasTemperature.h",
+    "Includepath": "C:\\Users\\Thoren Grube\\Documents\\Arduino\\libraries\\DallasTemperature"
+  },
+  {
+    "Sourcefile": "d:\\Projekte\\Bewässerungssystem\\repo\\Arduino\\IrrigationSystem\\build\\sketch\\IrrigationSystem.ino.cpp",
+    "Include": "",
+    "Includepath": null
+  },
+  {
+    "Sourcefile": "C:\\Users\\Thoren Grube\\Documents\\Arduino\\libraries\\UTFT\\DefaultFonts.c",
+    "Include": "",
+    "Includepath": null
+  },
+  {
+    "Sourcefile": "C:\\Users\\Thoren Grube\\Documents\\Arduino\\libraries\\UTFT\\UTFT.cpp",
+    "Include": "",
+    "Includepath": null
+  },
+  {
+    "Sourcefile": "C:\\Users\\Thoren Grube\\Documents\\Arduino\\libraries\\URTouch\\URTouch.cpp",
+    "Include": "",
+    "Includepath": null
+  },
+  {
+    "Sourcefile": "C:\\Users\\Thoren Grube\\Documents\\Arduino\\libraries\\TimerOne-master\\TimerOne.cpp",
+    "Include": "",
+    "Includepath": null
+  },
+  {
+    "Sourcefile": "C:\\Users\\Thoren Grube\\Documents\\Arduino\\libraries\\OneWire\\OneWire.cpp",
+    "Include": "",
+    "Includepath": null
+  },
+  {
+    "Sourcefile": "C:\\Users\\Thoren Grube\\Documents\\Arduino\\libraries\\DallasTemperature\\DallasTemperature.cpp",
+    "Include": "",
+    "Includepath": null
+  }
+]

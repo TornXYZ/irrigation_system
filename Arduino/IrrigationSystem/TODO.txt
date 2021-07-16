@@ -1,0 +1,2 @@
+- Abspeichern von Referenzwerten unterstützen
+- add water icon next to pot-button
